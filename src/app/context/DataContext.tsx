@@ -1,10 +1,29 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useEffect,
+} from "react";
+import {
+  collection,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  getDocs,
+  query,
+  where,
+  Timestamp,
+  writeBatch,
+} from "firebase/firestore";
+import { db } from "../../config/firebase";
 
 export interface Batch {
   id: string;
   name: string;
   description: string;
-  schedule: string; // e.g., "Morning", "Evening", "Sunday"
+  schedule: string;
   createdDate: string;
   studentCount: number;
 }
@@ -61,353 +80,271 @@ export interface Test {
 
 interface DataContextType {
   batches: Batch[];
-  addBatch: (batch: Omit<Batch, "id" | "createdDate" | "studentCount">) => void;
-  updateBatch: (id: string, batch: Partial<Batch>) => void;
-  deleteBatch: (id: string) => void;
+  addBatch: (
+    batch: Omit<Batch, "id" | "createdDate" | "studentCount">,
+  ) => Promise<void>;
+  updateBatch: (id: string, batch: Partial<Batch>) => Promise<void>;
+  deleteBatch: (id: string) => Promise<void>;
 
   students: Student[];
-  addStudent: (student: Omit<Student, "id">) => void;
-  updateStudent: (id: string, student: Partial<Student>) => void;
-  deleteStudent: (id: string) => void;
+  addStudent: (student: Omit<Student, "id">) => Promise<void>;
+  updateStudent: (id: string, student: Partial<Student>) => Promise<void>;
+  deleteStudent: (id: string) => Promise<void>;
   getStudentsByBatch: (batchId: string) => Student[];
 
   content: ContentItem[];
-  addContent: (item: Omit<ContentItem, "id" | "uploadDate">) => void;
-  deleteContent: (id: string) => void;
+  addContent: (item: Omit<ContentItem, "id" | "uploadDate">) => Promise<void>;
+  deleteContent: (id: string) => Promise<void>;
   getContentByBatch: (batchId: string) => ContentItem[];
 
   videos: Video[];
-  addVideo: (video: Omit<Video, "id" | "uploadDate">) => void;
-  deleteVideo: (id: string) => void;
+  addVideo: (video: Omit<Video, "id" | "uploadDate">) => Promise<void>;
+  deleteVideo: (id: string) => Promise<void>;
   getVideosByBatch: (batchId: string) => Video[];
 
   tests: Test[];
-  addTest: (test: Omit<Test, "id" | "createdDate">) => void;
-  updateTest: (id: string, test: Partial<Test>) => void;
-  deleteTest: (id: string) => void;
+  addTest: (test: Omit<Test, "id" | "createdDate">) => Promise<void>;
+  updateTest: (id: string, test: Partial<Test>) => Promise<void>;
+  deleteTest: (id: string) => Promise<void>;
   getTestsByBatch: (batchId: string) => Test[];
+
+  loading: boolean;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// Mock data
-const initialBatches: Batch[] = [
-  {
-    id: "1",
-    name: "Morning Batch",
-    description: "Classes from 6:00 AM to 12:00 PM",
-    schedule: "Monday to Friday, 6:00 AM - 12:00 PM",
-    createdDate: "2024-01-01",
-    studentCount: 2,
-  },
-  {
-    id: "2",
-    name: "Evening Batch",
-    description: "Classes from 4:00 PM to 9:00 PM",
-    schedule: "Monday to Friday, 4:00 PM - 9:00 PM",
-    createdDate: "2024-01-01",
-    studentCount: 2,
-  },
-  {
-    id: "3",
-    name: "Sunday Special Batch",
-    description: "Classes on Sunday",
-    schedule: "Sunday, 9:00 AM - 5:00 PM",
-    createdDate: "2024-01-15",
-    studentCount: 0,
-  },
-];
-
-const initialStudents: Student[] = [
-  {
-    id: "1",
-    studentId: "STU2024001",
-    name: "John Doe",
-    email: "john.doe@student.edu",
-    enrolledDate: "2024-01-15",
-    status: "active",
-    batchId: "1", // Morning Batch
-  },
-  {
-    id: "2",
-    studentId: "STU2024002",
-    name: "Jane Smith",
-    email: "jane.smith@student.edu",
-    enrolledDate: "2024-01-20",
-    status: "active",
-    batchId: "1", // Morning Batch
-  },
-  {
-    id: "3",
-    studentId: "STU2024003",
-    name: "Mike Johnson",
-    email: "mike.j@student.edu",
-    enrolledDate: "2024-02-01",
-    status: "active",
-    batchId: "2", // Evening Batch
-  },
-  {
-    id: "4",
-    studentId: "STU2024004",
-    name: "Sarah Williams",
-    email: "sarah.w@student.edu",
-    enrolledDate: "2024-02-10",
-    status: "active",
-    batchId: "2", // Evening Batch
-  },
-];
-
-const initialContent: ContentItem[] = [
-  {
-    id: "1",
-    title: "Introduction to Computer Science",
-    description: "Fundamental concepts and programming basics",
-    type: "pdf",
-    uploadDate: "2024-03-01",
-    visibilityType: "BATCH",
-    batchId: "1", // For Morning Batch
-  },
-  {
-    id: "2",
-    title: "Data Structures & Algorithms",
-    description: "Comprehensive guide to DSA",
-    type: "pdf",
-    uploadDate: "2024-03-05",
-    visibilityType: "BATCH",
-    batchId: "2", // For Evening Batch
-  },
-  {
-    id: "3",
-    title: "Web Development Notes",
-    description: "HTML, CSS, JavaScript fundamentals",
-    type: "note",
-    uploadDate: "2024-03-10",
-    visibilityType: "ALL",
-  },
-];
-
-const initialVideos: Video[] = [
-  {
-    id: "1",
-    title: "Introduction to Programming",
-    description: "Learn the basics of programming with Python",
-    thumbnail:
-      "https://images.unsplash.com/photo-1516116216624-53e697fedbea?w=800&q=80",
-    duration: "45:30",
-    uploadDate: "2024-03-01",
-    visibilityType: "BATCH",
-    batchId: "1", // For Morning Batch
-  },
-  {
-    id: "2",
-    title: "Advanced JavaScript Concepts",
-    description: "Deep dive into closures, promises, and async/await",
-    thumbnail:
-      "https://images.unsplash.com/photo-1587620962725-abab7fe55159?w=800&q=80",
-    duration: "1:20:15",
-    uploadDate: "2024-03-08",
-    visibilityType: "BATCH",
-    batchId: "2", // For Evening Batch
-  },
-  {
-    id: "3",
-    title: "Database Design Fundamentals",
-    description: "Learn SQL and database normalization",
-    thumbnail:
-      "https://images.unsplash.com/photo-1544383835-bda2bc66a55d?w=800&q=80",
-    duration: "55:20",
-    uploadDate: "2024-03-15",
-    visibilityType: "ALL",
-  },
-];
-
-const initialTests: Test[] = [
-  {
-    id: "1",
-    testNo: 1,
-    testDate: "28.02.26",
-    portion: "Unit-1 Descriptive Statistics",
-    startTime: "6:00 AM",
-    endTime: "7:30 AM",
-    cbtLink: "https://exam.example.com/test1",
-    status: "closed",
-    batchId: "1",
-    createdDate: "2024-02-10",
-  },
-  {
-    id: "2",
-    testNo: 2,
-    testDate: "22.03.26",
-    portion: "Unit – 2 Probability",
-    startTime: "2:00 PM",
-    endTime: "3:30 PM",
-    cbtLink: "https://exam.example.com/test2",
-    status: "closed",
-    batchId: "1",
-    createdDate: "2024-02-15",
-  },
-  {
-    id: "3",
-    testNo: 3,
-    testDate: "29.03.26",
-    portion: "Unit – 3 Probability Distributions",
-    startTime: "2:00 PM",
-    endTime: "3:30 PM",
-    cbtLink: "https://exam.example.com/test3",
-    status: "closed",
-    batchId: "1",
-    createdDate: "2024-02-20",
-  },
-  {
-    id: "4",
-    testNo: 4,
-    testDate: "05.04.26",
-    portion: "Unit – 4 Estimation Theory",
-    startTime: "2:00 PM",
-    endTime: "3:30 PM",
-    cbtLink: "https://exam.example.com/test4",
-    status: "closed",
-    batchId: "1",
-    createdDate: "2024-02-25",
-  },
-  {
-    id: "5",
-    testNo: 5,
-    testDate: "12.04.26",
-    portion: "Unit – 5 Tests of Hypotheses",
-    startTime: "2:00 PM",
-    endTime: "3:30 PM",
-    cbtLink: "https://exam.example.com/test5",
-    status: "closed",
-    batchId: "1",
-    createdDate: "2024-03-01",
-  },
-  {
-    id: "6",
-    testNo: 6,
-    testDate: "19.04.26",
-    portion: "Unit – 6 Sampling & DOE",
-    startTime: "2:00 PM",
-    endTime: "3:30 PM",
-    cbtLink: "https://exam.example.com/test6",
-    status: "active",
-    batchId: "1",
-    createdDate: "2024-03-05",
-  },
-  {
-    id: "7",
-    testNo: 7,
-    testDate: "26.04.26",
-    portion: "Unit – 7 Time Series & Index Numbers",
-    startTime: "2:00 PM",
-    endTime: "3:30 PM",
-    cbtLink: "https://exam.example.com/test7",
-    status: "active",
-    batchId: "1",
-    createdDate: "2024-03-10",
-  },
-  {
-    id: "8",
-    testNo: 8,
-    testDate: "03.05.26",
-    portion: "Unit – 8,9,10 SQC, Vital Statistics, Statistical Computing",
-    startTime: "2:00 PM",
-    endTime: "3:30 PM",
-    cbtLink: "https://exam.example.com/test8",
-    status: "active",
-    batchId: "1",
-    createdDate: "2024-03-15",
-  },
-];
-
 export function DataProvider({ children }: { children: ReactNode }) {
-  const [batches, setBatches] = useState<Batch[]>(initialBatches);
-  const [students, setStudents] = useState<Student[]>(initialStudents);
-  const [content, setContent] = useState<ContentItem[]>(initialContent);
-  const [videos, setVideos] = useState<Video[]>(initialVideos);
-  const [tests, setTests] = useState<Test[]>(initialTests);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [content, setContent] = useState<ContentItem[]>([]);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [tests, setTests] = useState<Test[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const addBatch = (
+  // Load all data from Firestore on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        await Promise.all([
+          loadBatches(),
+          loadStudents(),
+          loadContent(),
+          loadVideos(),
+          loadTests(),
+        ]);
+      } catch (error) {
+        console.error("Error loading data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  const loadBatches = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "batches"));
+      const batchesData = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Batch[];
+      setBatches(batchesData);
+    } catch (error) {
+      console.error("Error loading batches:", error);
+    }
+  };
+
+  const loadStudents = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "students"));
+      const studentsData = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Student[];
+      setStudents(studentsData);
+    } catch (error) {
+      console.error("Error loading students:", error);
+    }
+  };
+
+  const loadContent = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "content"));
+      const contentData = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as ContentItem[];
+      setContent(contentData);
+    } catch (error) {
+      console.error("Error loading content:", error);
+    }
+  };
+
+  const loadVideos = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "videos"));
+      const videosData = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Video[];
+      setVideos(videosData);
+    } catch (error) {
+      console.error("Error loading videos:", error);
+    }
+  };
+
+  const loadTests = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "tests"));
+      const testsData = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Test[];
+      setTests(testsData);
+    } catch (error) {
+      console.error("Error loading tests:", error);
+    }
+  };
+
+  // Batch operations
+  const addBatch = async (
     batch: Omit<Batch, "id" | "createdDate" | "studentCount">,
   ) => {
-    const newBatch: Batch = {
-      ...batch,
-      id: Date.now().toString(),
-      createdDate: new Date().toISOString().split("T")[0],
-      studentCount: 0,
-    };
-    setBatches([...batches, newBatch]);
+    try {
+      const newBatch = {
+        ...batch,
+        createdDate: new Date().toISOString().split("T")[0],
+        studentCount: 0,
+      };
+      const docRef = await addDoc(collection(db, "batches"), newBatch);
+      setBatches([
+        ...batches,
+        {
+          ...newBatch,
+          id: docRef.id,
+        },
+      ]);
+    } catch (error) {
+      console.error("Error adding batch:", error);
+      throw error;
+    }
   };
 
-  const updateBatch = (id: string, updates: Partial<Batch>) => {
-    setBatches(batches.map((b) => (b.id === id ? { ...b, ...updates } : b)));
+  const updateBatch = async (id: string, updates: Partial<Batch>) => {
+    try {
+      await updateDoc(doc(db, "batches", id), updates);
+      setBatches(batches.map((b) => (b.id === id ? { ...b, ...updates } : b)));
+    } catch (error) {
+      console.error("Error updating batch:", error);
+      throw error;
+    }
   };
 
-  const deleteBatch = (id: string) => {
-    // Remove batch association from students
-    setStudents(
-      students.map((s) =>
-        s.batchId === id ? { ...s, batchId: undefined } : s,
-      ),
-    );
-    setBatches(batches.filter((b) => b.id !== id));
-  };
+  const deleteBatch = async (id: string) => {
+    try {
+      const batch = writeBatch(db);
+      batch.delete(doc(db, "batches", id));
 
-  const addStudent = (student: Omit<Student, "id">) => {
-    const newStudent = {
-      ...student,
-      id: Date.now().toString(),
-    };
-    setStudents([...students, newStudent]);
-
-    // Update batch student count
-    if (newStudent.batchId) {
-      updateBatch(newStudent.batchId, {
-        studentCount:
-          batches.find((b) => b.id === newStudent.batchId)?.studentCount ||
-          0 + 1,
+      // Remove batch association from students
+      const affectedStudents = students.filter((s) => s.batchId === id);
+      affectedStudents.forEach((student) => {
+        batch.update(doc(db, "students", student.id), { batchId: null });
       });
-    }
-  };
 
-  const updateStudent = (id: string, updates: Partial<Student>) => {
-    const oldStudent = students.find((s) => s.id === id);
-    setStudents(students.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+      await batch.commit();
 
-    // Update batch student counts if batch changed
-    if (oldStudent && oldStudent.batchId !== updates.batchId) {
-      if (oldStudent.batchId) {
-        updateBatch(oldStudent.batchId, {
-          studentCount: Math.max(
-            0,
-            (batches.find((b) => b.id === oldStudent.batchId)?.studentCount ||
-              0) - 1,
-          ),
-        });
-      }
-      if (updates.batchId) {
-        updateBatch(updates.batchId, {
-          studentCount:
-            (batches.find((b) => b.id === updates.batchId)?.studentCount || 0) +
-            1,
-        });
-      }
-    }
-  };
-
-  const deleteStudent = (id: string) => {
-    const student = students.find((s) => s.id === id);
-    setStudents(students.filter((s) => s.id !== id));
-
-    // Update batch student count
-    if (student?.batchId) {
-      updateBatch(student.batchId, {
-        studentCount: Math.max(
-          0,
-          (batches.find((b) => b.id === student.batchId)?.studentCount || 0) -
-            1,
+      setBatches(batches.filter((b) => b.id !== id));
+      setStudents(
+        students.map((s) =>
+          s.batchId === id ? { ...s, batchId: undefined } : s,
         ),
-      });
+      );
+    } catch (error) {
+      console.error("Error deleting batch:", error);
+      throw error;
+    }
+  };
+
+  // Student operations
+  const addStudent = async (student: Omit<Student, "id">) => {
+    try {
+      const newStudent = {
+        ...student,
+        enrolledDate:
+          student.enrolledDate || new Date().toISOString().split("T")[0],
+      };
+      const docRef = await addDoc(collection(db, "students"), newStudent);
+      const studentWithId = { ...newStudent, id: docRef.id };
+      setStudents([...students, studentWithId]);
+
+      // Update batch student count
+      if (newStudent.batchId) {
+        const batch = batches.find((b) => b.id === newStudent.batchId);
+        if (batch) {
+          await updateBatch(newStudent.batchId, {
+            studentCount: batch.studentCount + 1,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error adding student:", error);
+      throw error;
+    }
+  };
+
+  const updateStudent = async (id: string, updates: Partial<Student>) => {
+    try {
+      const oldStudent = students.find((s) => s.id === id);
+      await updateDoc(doc(db, "students", id), updates);
+      setStudents(
+        students.map((s) => (s.id === id ? { ...s, ...updates } : s)),
+      );
+
+      // Update batch student counts if batch changed
+      if (oldStudent && oldStudent.batchId !== updates.batchId) {
+        if (oldStudent.batchId) {
+          const oldBatch = batches.find((b) => b.id === oldStudent.batchId);
+          if (oldBatch) {
+            await updateBatch(oldStudent.batchId, {
+              studentCount: Math.max(0, oldBatch.studentCount - 1),
+            });
+          }
+        }
+        if (updates.batchId) {
+          const newBatch = batches.find((b) => b.id === updates.batchId);
+          if (newBatch) {
+            await updateBatch(updates.batchId, {
+              studentCount: newBatch.studentCount + 1,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error updating student:", error);
+      throw error;
+    }
+  };
+
+  const deleteStudent = async (id: string) => {
+    try {
+      const student = students.find((s) => s.id === id);
+      await deleteDoc(doc(db, "students", id));
+      setStudents(students.filter((s) => s.id !== id));
+
+      // Update batch student count
+      if (student?.batchId) {
+        const batch = batches.find((b) => b.id === student.batchId);
+        if (batch) {
+          await updateBatch(student.batchId, {
+            studentCount: Math.max(0, batch.studentCount - 1),
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting student:", error);
+      throw error;
     }
   };
 
@@ -415,17 +352,29 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return students.filter((s) => s.batchId === batchId);
   };
 
-  const addContent = (item: Omit<ContentItem, "id" | "uploadDate">) => {
-    const newItem = {
-      ...item,
-      id: Date.now().toString(),
-      uploadDate: new Date().toISOString().split("T")[0],
-    };
-    setContent([...content, newItem]);
+  // Content operations
+  const addContent = async (item: Omit<ContentItem, "id" | "uploadDate">) => {
+    try {
+      const newItem = {
+        ...item,
+        uploadDate: new Date().toISOString().split("T")[0],
+      };
+      const docRef = await addDoc(collection(db, "content"), newItem);
+      setContent([...content, { ...newItem, id: docRef.id }]);
+    } catch (error) {
+      console.error("Error adding content:", error);
+      throw error;
+    }
   };
 
-  const deleteContent = (id: string) => {
-    setContent(content.filter((c) => c.id !== id));
+  const deleteContent = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "content", id));
+      setContent(content.filter((c) => c.id !== id));
+    } catch (error) {
+      console.error("Error deleting content:", error);
+      throw error;
+    }
   };
 
   const getContentByBatch = (batchId: string): ContentItem[] => {
@@ -436,17 +385,29 @@ export function DataProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const addVideo = (video: Omit<Video, "id" | "uploadDate">) => {
-    const newVideo = {
-      ...video,
-      id: Date.now().toString(),
-      uploadDate: new Date().toISOString().split("T")[0],
-    };
-    setVideos([...videos, newVideo]);
+  // Video operations
+  const addVideo = async (video: Omit<Video, "id" | "uploadDate">) => {
+    try {
+      const newVideo = {
+        ...video,
+        uploadDate: new Date().toISOString().split("T")[0],
+      };
+      const docRef = await addDoc(collection(db, "videos"), newVideo);
+      setVideos([...videos, { ...newVideo, id: docRef.id }]);
+    } catch (error) {
+      console.error("Error adding video:", error);
+      throw error;
+    }
   };
 
-  const deleteVideo = (id: string) => {
-    setVideos(videos.filter((v) => v.id !== id));
+  const deleteVideo = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "videos", id));
+      setVideos(videos.filter((v) => v.id !== id));
+    } catch (error) {
+      console.error("Error deleting video:", error);
+      throw error;
+    }
   };
 
   const getVideosByBatch = (batchId: string): Video[] => {
@@ -457,21 +418,39 @@ export function DataProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const addTest = (test: Omit<Test, "id" | "createdDate">) => {
-    const newTest: Test = {
-      ...test,
-      id: Date.now().toString(),
-      createdDate: new Date().toISOString().split("T")[0],
-    };
-    setTests([...tests, newTest]);
+  // Test operations
+  const addTest = async (test: Omit<Test, "id" | "createdDate">) => {
+    try {
+      const newTest = {
+        ...test,
+        createdDate: new Date().toISOString().split("T")[0],
+      };
+      const docRef = await addDoc(collection(db, "tests"), newTest);
+      setTests([...tests, { ...newTest, id: docRef.id }]);
+    } catch (error) {
+      console.error("Error adding test:", error);
+      throw error;
+    }
   };
 
-  const updateTest = (id: string, updates: Partial<Test>) => {
-    setTests(tests.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+  const updateTest = async (id: string, updates: Partial<Test>) => {
+    try {
+      await updateDoc(doc(db, "tests", id), updates);
+      setTests(tests.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+    } catch (error) {
+      console.error("Error updating test:", error);
+      throw error;
+    }
   };
 
-  const deleteTest = (id: string) => {
-    setTests(tests.filter((t) => t.id !== id));
+  const deleteTest = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "tests", id));
+      setTests(tests.filter((t) => t.id !== id));
+    } catch (error) {
+      console.error("Error deleting test:", error);
+      throw error;
+    }
   };
 
   const getTestsByBatch = (batchId: string): Test[] => {
@@ -505,6 +484,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         updateTest,
         deleteTest,
         getTestsByBatch,
+        loading,
       }}
     >
       {children}

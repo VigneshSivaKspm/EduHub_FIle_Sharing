@@ -40,10 +40,12 @@ export default function Login() {
       if (success) {
         navigate(role === "admin" ? "/admin" : "/student");
       } else {
-        setError('Invalid credentials. Try password: "password"');
+        setError("Invalid email or password. Please check your credentials.");
       }
-    } catch (err) {
-      setError("An error occurred. Please try again.");
+    } catch (err: any) {
+      const errorMessage =
+        err?.message || "An error occurred. Please try again.";
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -122,8 +124,7 @@ export default function Login() {
 
             <div className="pt-4 border-t">
               <p className="text-xs text-center text-slate-500">
-                Demo credentials: Use any email with password:{" "}
-                <span className="font-medium text-slate-700">"password"</span>
+                Use your email and password registered in Firebase to sign in.
               </p>
             </div>
           </form>

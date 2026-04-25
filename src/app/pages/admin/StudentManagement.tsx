@@ -50,6 +50,8 @@ export default function StudentManagement() {
   const [selectedBatch, setSelectedBatch] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const [formData, setFormData] = useState({
     studentId: "",
@@ -73,27 +75,35 @@ export default function StudentManagement() {
       student.studentId.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
+    setError("");
 
-    if (editingStudent) {
-      updateStudent(editingStudent.id, formData);
-      setEditingStudent(null);
-    } else {
-      addStudent({
-        ...formData,
-        enrolledDate: new Date().toISOString().split("T")[0],
+    try {
+      if (editingStudent) {
+        await updateStudent(editingStudent.id, formData);
+        setEditingStudent(null);
+      } else {
+        await addStudent({
+          ...formData,
+          enrolledDate: new Date().toISOString().split("T")[0],
+        });
+        setIsAddDialogOpen(false);
+      }
+
+      setFormData({
+        studentId: "",
+        name: "",
+        email: "",
+        status: "active",
+        batchId: "",
       });
-      setIsAddDialogOpen(false);
+    } catch (err: any) {
+      setError(err?.message || "Failed to save student");
+    } finally {
+      setIsLoading(false);
     }
-
-    setFormData({
-      studentId: "",
-      name: "",
-      email: "",
-      status: "active",
-      batchId: "",
-    });
   };
 
   const handleEdit = (student: Student) => {
@@ -107,9 +117,17 @@ export default function StudentManagement() {
     });
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to delete this student?")) {
-      deleteStudent(id);
+      setIsLoading(true);
+      setError("");
+      try {
+        await deleteStudent(id);
+      } catch (err: any) {
+        setError(err?.message || "Failed to delete student");
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -122,6 +140,7 @@ export default function StudentManagement() {
       batchId: "",
     });
     setEditingStudent(null);
+    setError("");
   };
 
   const getBatchName = (batchId?: string) => {
@@ -158,13 +177,22 @@ export default function StudentManagement() {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Enroll New Student</DialogTitle>
+              <DialogTitle>
+                {editingStudent ? "Edit Student" : "Enroll New Student"}
+              </DialogTitle>
               <DialogDescription>
-                Add a new student to the portal
+                {editingStudent
+                  ? "Update student information"
+                  : "Add a new student to the portal"}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit}>
               <div className="space-y-4 py-4">
+                {error && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-800">{error}</p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="studentId">Student ID</Label>
                   <Input
@@ -247,15 +275,24 @@ export default function StudentManagement() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsAddDialogOpen(false)}
+                  onClick={() => {
+                    setIsAddDialogOpen(false);
+                    resetForm();
+                  }}
+                  disabled={isLoading}
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   className="bg-indigo-600 hover:bg-indigo-700"
+                  disabled={isLoading}
                 >
-                  Add Student
+                  {isLoading
+                    ? "Saving..."
+                    : editingStudent
+                      ? "Update Student"
+                      : "Add Student"}
                 </Button>
               </DialogFooter>
             </form>

@@ -1,4 +1,20 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useEffect,
+} from "react";
+import {
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  updateProfile,
+  User as FirebaseUser,
+} from "firebase/auth";
+import { auth, db } from "../../config/firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
 export type UserRole = "admin" | "student";
 
@@ -14,38 +30,86 @@ interface User {
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string, role: UserRole) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch user role and data from Firestore
+  const fetchUserData = async (
+    firebaseUser: FirebaseUser,
+  ): Promise<User | null> => {
+    try {
+      const userDocRef = doc(db, "users", firebaseUser.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (userDocSnap.exists()) {
+        const userData = userDocSnap.data();
+        return {
+          id: firebaseUser.uid,
+          email: firebaseUser.email || "",
+          name: firebaseUser.displayName || "",
+          role: userData.role || "student",
+          studentId: userData.studentId,
+          batchId: userData.batchId,
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+      return null;
+    }
+  };
+
+  // Monitor auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const userData = await fetchUserData(firebaseUser);
+        setUser(userData);
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return unsubscribe;
+  }, []);
 
   const login = async (
     email: string,
     password: string,
     role: UserRole,
   ): Promise<boolean> => {
-    // Mock authentication
-    if (password === "password") {
-      const mockUser: User = {
-        id: role === "admin" ? "admin-1" : "student-1",
-        email,
-        name: role === "admin" ? "Admin User" : "John Doe",
-        role,
-        studentId: role === "student" ? "STU2024001" : undefined,
-        batchId: role === "student" ? "1" : undefined, // Morning Batch
-      };
-      setUser(mockUser);
-      return true;
+    try {
+      const result = await signInWithEmailAndPassword(auth, email, password);
+
+      // Fetch user data to verify role
+      const userData = await fetchUserData(result.user);
+      if (userData) {
+        setUser(userData);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Login error:", error);
+      return false;
     }
-    return false;
   };
 
-  const logout = () => {
-    setUser(null);
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
   };
 
   return (
@@ -55,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         isAuthenticated: !!user,
+        loading,
       }}
     >
       {children}
