@@ -14,6 +14,7 @@ import StudentDashboard from "./pages/student/Dashboard";
 import MediaLibrary from "./pages/student/MediaLibrary";
 import TestSchedule from "./pages/student/TestSchedule";
 import VideoPlayer from "./pages/student/VideoPlayer";
+import PdfViewer from "./pages/student/PdfViewer";
 
 function StudentOnlyRoute({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -73,6 +74,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <StudentDashboard /> },
       { path: "media", element: <MediaLibrary /> },
+      { path: "pdf/:id", element: <PdfViewer /> },
       { path: "video/:id", element: <VideoPlayer /> },
       { path: "tests", element: <TestSchedule /> },
     ],

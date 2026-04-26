@@ -180,7 +180,7 @@ export default function MediaLibrary() {
                         }
 
                         if ("fileUrl" in item && item.fileUrl) {
-                          window.open(item.fileUrl, "_blank", "noopener,noreferrer");
+                          navigate(`/student/pdf/${item.id}`);
                         }
                       }}
                       className="bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap"

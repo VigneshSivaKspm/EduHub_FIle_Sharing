@@ -48,21 +48,35 @@ export default function VideoPlayer() {
     }
   }, []);
 
-  // Prevent right-click on video
+  // Harden player interaction and common download/devtool shortcuts
   useEffect(() => {
     const preventContextMenu = (e: MouseEvent) => {
       e.preventDefault();
     };
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      if (
+        (e.ctrlKey && ["s", "p", "u", "c", "x"].includes(key)) ||
+        (e.ctrlKey && e.shiftKey && ["i", "j", "c"].includes(key)) ||
+        key === "f12" ||
+        key === "printscreen"
+      ) {
+        e.preventDefault();
+      }
+    };
+
     const videoElement = videoRef.current;
     if (videoElement) {
-      videoElement.addEventListener('contextmenu', preventContextMenu);
+      videoElement.addEventListener("contextmenu", preventContextMenu);
     }
+    window.addEventListener("keydown", handleKeyDown);
 
     return () => {
       if (videoElement) {
-        videoElement.removeEventListener('contextmenu', preventContextMenu);
+        videoElement.removeEventListener("contextmenu", preventContextMenu);
       }
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
 
@@ -113,10 +127,12 @@ export default function VideoPlayer() {
                 ref={videoRef}
                 className="w-full h-full"
                 controls
-                controlsList="nodownload"
+                controlsList="nodownload noremoteplayback noplaybackrate"
+                disablePictureInPicture
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
                 poster={video.thumbnail}
+                onContextMenu={(e) => e.preventDefault()}
               >
                 <source src={video.videoUrl} type="video/mp4" />
                 Your browser does not support the video tag.

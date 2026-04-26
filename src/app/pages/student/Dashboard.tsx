@@ -133,10 +133,7 @@ export default function StudentDashboard() {
               <div
                 key={item.id}
                 className="flex items-start gap-4 p-3 border border-slate-200 rounded-lg hover:border-indigo-200 hover:bg-indigo-50/50 transition-all cursor-pointer"
-                onClick={() =>
-                  item.fileUrl &&
-                  window.open(item.fileUrl, "_blank", "noopener,noreferrer")
-                }
+                onClick={() => navigate(`/student/pdf/${item.id}`)}
               >
                 <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   <FileText className="w-5 h-5 text-indigo-600" />

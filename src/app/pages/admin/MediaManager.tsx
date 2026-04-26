@@ -1,8 +1,9 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useData } from "../../context/DataContext";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
+import { Progress } from "../../components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -27,8 +28,13 @@ import {
 } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Textarea } from "../../components/ui/textarea";
-import { Upload, Trash2, FileText, Film, Plus } from "lucide-react";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { Upload, Trash2, FileText, Film, Plus, FileVideo } from "lucide-react";
+import {
+  getDownloadURL,
+  ref,
+  uploadBytes,
+  uploadBytesResumable,
+} from "firebase/storage";
 import { storage } from "../../../config/firebase";
 
 export default function MediaManager() {
@@ -45,24 +51,50 @@ export default function MediaManager() {
     batches[0]?.id || "",
   );
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
-  const [uploadType, setUploadType] = useState<"video" | "pdf">("pdf");
 
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    type: "pdf" as "pdf" | "doc",
   });
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedPdfFile, setSelectedPdfFile] = useState<File | null>(null);
+  const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [videoUploadProgress, setVideoUploadProgress] = useState(0);
   const [error, setError] = useState("");
 
-  const uploadFileToStorage = async (folder: "content" | "videos", file: File) => {
+  const uploadFileToStorage = async (
+    folder: "content" | "videos",
+    file: File,
+    onProgress?: (progress: number) => void,
+  ) => {
     const safeName = file.name.replace(/\s+/g, "_");
     const filePath = `${folder}/${Date.now()}-${safeName}`;
     const fileRef = ref(storage, filePath);
+    if (folder === "videos") {
+      return new Promise<string>((resolve, reject) => {
+        const uploadTask = uploadBytesResumable(fileRef, file);
+        uploadTask.on(
+          "state_changed",
+          (snapshot) => {
+            const progress = Math.round(
+              (snapshot.bytesTransferred / snapshot.totalBytes) * 100,
+            );
+            onProgress?.(progress);
+          },
+          reject,
+          async () => {
+            resolve(await getDownloadURL(uploadTask.snapshot.ref));
+          },
+        );
+      });
+    }
+
     await uploadBytes(fileRef, file);
     return getDownloadURL(fileRef);
   };
+
+  const getFileBaseName = (file: File) =>
+    file.name.replace(/\.[^/.]+$/, "").trim() || "Untitled";
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,43 +105,65 @@ export default function MediaManager() {
       return;
     }
 
-    if (!selectedFile) {
-      setError(
-        uploadType === "pdf"
-          ? "Please select a PDF file."
-          : "Please select a video file.",
-      );
+    if (!selectedPdfFile && !selectedVideoFile) {
+      setError("Please select at least one file (PDF or Video).");
       return;
     }
 
     try {
       setIsUploading(true);
-      if (uploadType === "pdf") {
-        const fileUrl = await uploadFileToStorage("content", selectedFile);
-        const type = selectedFile.name.toLowerCase().endsWith(".pdf") ? "pdf" : "doc";
+      setVideoUploadProgress(0);
+      const hasBothFiles = !!selectedPdfFile && !!selectedVideoFile;
+
+      if (selectedPdfFile) {
+        const fileUrl = await uploadFileToStorage("content", selectedPdfFile);
+        const type = selectedPdfFile.name.toLowerCase().endsWith(".pdf")
+          ? "pdf"
+          : "doc";
+        const title =
+          formData.title.trim() && !hasBothFiles
+            ? formData.title.trim()
+            : formData.title.trim()
+              ? `${formData.title.trim()} (PDF)`
+              : getFileBaseName(selectedPdfFile);
         await addContent({
-          title: formData.title,
+          title,
           description: formData.description,
           type,
           visibilityType: "BATCH",
           batchId: selectedBatch,
           fileUrl,
         });
-      } else {
-        const videoUrl = await uploadFileToStorage("videos", selectedFile);
+      }
+
+      if (selectedVideoFile) {
+        const videoUrl = await uploadFileToStorage(
+          "videos",
+          selectedVideoFile,
+          setVideoUploadProgress,
+        );
+        const title =
+          formData.title.trim() && !hasBothFiles
+            ? formData.title.trim()
+            : formData.title.trim()
+              ? `${formData.title.trim()} (Video)`
+              : getFileBaseName(selectedVideoFile);
+
         await addVideo({
-          title: formData.title,
+          title,
           description: formData.description,
           duration: "00:00",
-          thumbnail: `https://placehold.co/640x360/0f172a/ffffff?text=${encodeURIComponent(formData.title || "Video")}`,
+          thumbnail: `https://placehold.co/640x360/0f172a/ffffff?text=${encodeURIComponent(title || "Video")}`,
           visibilityType: "BATCH",
           batchId: selectedBatch,
           videoUrl,
         });
       }
 
-      setFormData({ title: "", description: "", type: "pdf" });
-      setSelectedFile(null);
+      setFormData({ title: "", description: "" });
+      setSelectedPdfFile(null);
+      setSelectedVideoFile(null);
+      setVideoUploadProgress(0);
       setIsUploadDialogOpen(false);
     } catch (uploadError: any) {
       setError(uploadError?.message || "Upload failed. Please try again.");
@@ -152,9 +206,7 @@ export default function MediaManager() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Upload Media</DialogTitle>
-              <DialogDescription>
-                Add videos or PDF materials to your batch
-              </DialogDescription>
+              <DialogDescription>Upload PDF and video together in one go</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleUpload}>
               <div className="space-y-4 py-4">
@@ -183,33 +235,14 @@ export default function MediaManager() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="type">Media Type</Label>
-                  <Select
-                    value={uploadType}
-                    onValueChange={(value) =>
-                      setUploadType(value as "video" | "pdf")
-                    }
-                  >
-                    <SelectTrigger id="type">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pdf">PDF Document</SelectItem>
-                      <SelectItem value="video">Video</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
                   <Label htmlFor="title">Title</Label>
                   <Input
                     id="title"
-                    placeholder={`Enter ${uploadType === "pdf" ? "document" : "video"} title`}
+                    placeholder="Optional: common title for selected files"
                     value={formData.title}
                     onChange={(e) =>
                       setFormData({ ...formData, title: e.target.value })
                     }
-                    required
                   />
                 </div>
 
@@ -226,34 +259,75 @@ export default function MediaManager() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="file">Upload File</Label>
-                  <label
-                    htmlFor="file"
-                    className="block border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 cursor-pointer transition"
-                  >
-                    <Upload className="w-8 h-8 mx-auto text-slate-400 mb-2" />
-                    <p className="text-sm text-slate-600">
-                      {uploadType === "pdf"
-                        ? "Select PDF file to upload"
-                        : "Select video file to upload"}
-                    </p>
-                    <input
-                      id="file"
-                      type="file"
-                      className="hidden"
-                      accept={uploadType === "pdf" ? ".pdf" : "video/*"}
-                      onChange={(e) =>
-                        setSelectedFile(e.target.files?.[0] || null)
-                      }
-                    />
-                  </label>
-                  {selectedFile && (
-                    <p className="text-xs text-slate-500">
-                      Selected: {selectedFile.name}
-                    </p>
-                  )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="pdf-file">PDF Document</Label>
+                    <label
+                      htmlFor="pdf-file"
+                      className="block border-2 border-dashed border-slate-300 rounded-xl p-5 text-center hover:bg-slate-50 cursor-pointer transition"
+                    >
+                      <FileText className="w-8 h-8 mx-auto text-red-500 mb-2" />
+                      <p className="text-sm text-slate-700 font-medium">
+                        Select PDF file
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">.pdf supported</p>
+                      <input
+                        id="pdf-file"
+                        type="file"
+                        className="hidden"
+                        accept=".pdf"
+                        onChange={(e) =>
+                          setSelectedPdfFile(e.target.files?.[0] || null)
+                        }
+                      />
+                    </label>
+                    {selectedPdfFile && (
+                      <p className="text-xs text-slate-500 truncate">
+                        Selected: {selectedPdfFile.name}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="video-file">Video File</Label>
+                    <label
+                      htmlFor="video-file"
+                      className="block border-2 border-dashed border-slate-300 rounded-xl p-5 text-center hover:bg-slate-50 cursor-pointer transition"
+                    >
+                      <FileVideo className="w-8 h-8 mx-auto text-indigo-500 mb-2" />
+                      <p className="text-sm text-slate-700 font-medium">
+                        Select video file
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        MP4, MOV, WebM, etc.
+                      </p>
+                      <input
+                        id="video-file"
+                        type="file"
+                        className="hidden"
+                        accept="video/*"
+                        onChange={(e) =>
+                          setSelectedVideoFile(e.target.files?.[0] || null)
+                        }
+                      />
+                    </label>
+                    {selectedVideoFile && (
+                      <p className="text-xs text-slate-500 truncate">
+                        Selected: {selectedVideoFile.name}
+                      </p>
+                    )}
+                  </div>
                 </div>
+
+                {isUploading && selectedVideoFile && (
+                  <div className="space-y-2 rounded-lg border border-indigo-100 bg-indigo-50/60 p-3">
+                    <div className="flex items-center justify-between text-xs font-medium text-indigo-800">
+                      <span>Video upload progress</span>
+                      <span>{videoUploadProgress}%</span>
+                    </div>
+                    <Progress value={videoUploadProgress} className="h-2" />
+                  </div>
+                )}
               </div>
 
               <DialogFooter>
@@ -262,7 +336,9 @@ export default function MediaManager() {
                   variant="outline"
                   onClick={() => {
                     setIsUploadDialogOpen(false);
-                    setSelectedFile(null);
+                    setSelectedPdfFile(null);
+                    setSelectedVideoFile(null);
+                    setVideoUploadProgress(0);
                     setError("");
                   }}
                   disabled={isUploading}
@@ -274,7 +350,7 @@ export default function MediaManager() {
                   className="bg-indigo-600 hover:bg-indigo-700"
                   disabled={isUploading}
                 >
-                  {isUploading ? "Uploading..." : "Upload Media"}
+                  {isUploading ? "Uploading..." : "Upload Selected Media"}
                 </Button>
               </DialogFooter>
             </form>
