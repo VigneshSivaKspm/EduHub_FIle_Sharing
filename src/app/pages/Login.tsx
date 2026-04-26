@@ -23,7 +23,7 @@ export default function Login({ role = "student" }: LoginProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, loginStudentWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -47,6 +47,18 @@ export default function Login({ role = "student" }: LoginProps) {
     }
   };
 
+  const handleStudentGoogleLogin = async () => {
+    setError("");
+    setLoading(true);
+    const result = await loginStudentWithGoogle();
+    if (result.success) {
+      navigate("/student");
+    } else {
+      setError(result.error || "Google sign-in failed.");
+    }
+    setLoading(false);
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-slate-100 p-4">
       <Card className="w-full max-w-md shadow-xl border-indigo-100">
@@ -62,32 +74,39 @@ export default function Login({ role = "student" }: LoginProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="your.email@edu.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="bg-white"
-              />
-            </div>
+          <form
+            onSubmit={role === "admin" ? handleSubmit : undefined}
+            className="space-y-5"
+          >
+            {role === "admin" && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email Address</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="your.email@edu.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="bg-white"
+                  />
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="bg-white"
-              />
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="bg-white"
+                  />
+                </div>
+              </>
+            )}
 
             {error && (
               <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
@@ -96,17 +115,30 @@ export default function Login({ role = "student" }: LoginProps) {
               </div>
             )}
 
-            <Button
-              type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-700"
-              disabled={loading}
-            >
-              {loading ? "Signing in..." : "Sign In"}
-            </Button>
+            {role === "admin" ? (
+              <Button
+                type="submit"
+                className="w-full bg-indigo-600 hover:bg-indigo-700"
+                disabled={loading}
+              >
+                {loading ? "Signing in..." : "Sign In"}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                className="w-full bg-indigo-600 hover:bg-indigo-700"
+                onClick={handleStudentGoogleLogin}
+                disabled={loading}
+              >
+                {loading ? "Connecting to Google..." : "Continue with Google"}
+              </Button>
+            )}
 
             <div className="pt-4 border-t">
               <p className="text-xs text-center text-slate-500">
-                Use your email and password registered in Firebase to sign in.
+                {role === "admin"
+                  ? "Use your email and password registered in Firebase to sign in."
+                  : "Students can sign in only with their admin-registered Google account."}
               </p>
               {role === "admin" && (
                 <p className="text-sm text-center text-slate-600 mt-2">

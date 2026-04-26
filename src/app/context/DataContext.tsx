@@ -273,6 +273,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     try {
       const newStudent = {
         ...student,
+        email: student.email.toLowerCase(),
         enrolledDate:
           student.enrolledDate || new Date().toISOString().split("T")[0],
       };
@@ -298,13 +299,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const updateStudent = async (id: string, updates: Partial<Student>) => {
     try {
       const oldStudent = students.find((s) => s.id === id);
-      await updateDoc(doc(db, "students", id), updates);
+      const normalizedUpdates = {
+        ...updates,
+        ...(updates.email ? { email: updates.email.toLowerCase() } : {}),
+      };
+      await updateDoc(doc(db, "students", id), normalizedUpdates);
       setStudents(
-        students.map((s) => (s.id === id ? { ...s, ...updates } : s)),
+        students.map((s) =>
+          s.id === id ? { ...s, ...normalizedUpdates } : s,
+        ),
       );
 
       // Update batch student counts if batch changed
-      if (oldStudent && oldStudent.batchId !== updates.batchId) {
+      if (oldStudent && oldStudent.batchId !== normalizedUpdates.batchId) {
         if (oldStudent.batchId) {
           const oldBatch = batches.find((b) => b.id === oldStudent.batchId);
           if (oldBatch) {
@@ -313,10 +320,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
             });
           }
         }
-        if (updates.batchId) {
-          const newBatch = batches.find((b) => b.id === updates.batchId);
+        if (normalizedUpdates.batchId) {
+          const newBatch = batches.find((b) => b.id === normalizedUpdates.batchId);
           if (newBatch) {
-            await updateBatch(updates.batchId, {
+            await updateBatch(normalizedUpdates.batchId, {
               studentCount: newBatch.studentCount + 1,
             });
           }

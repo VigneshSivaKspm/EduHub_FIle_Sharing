@@ -1,35 +1,78 @@
-import { useData } from '../../context/DataContext';
-import { useAuth } from '../../context/AuthContext';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
-import { Badge } from '../../components/ui/badge';
-import { BookOpen, Video, FileText, Download, Clock, ArrowRight } from 'lucide-react';
-import { useNavigate } from 'react-router';
+import { useMemo } from "react";
+import { useData } from "../../context/DataContext";
+import { useAuth } from "../../context/AuthContext";
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import { Button } from "../../components/ui/button";
+import { Badge } from "../../components/ui/badge";
+import { BookOpen, Video, FileText, Clock, ArrowRight } from "lucide-react";
+import { useNavigate } from "react-router";
 
 export default function StudentDashboard() {
-  const { content, videos } = useData();
+  const { content, videos, tests } = useData();
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // Filter content available to the current user
-  const availableContent = content.filter(item => 
-    item.visibilityType === 'ALL' || 
-    (item.visibilityType === 'SELECTIVE' && item.selectedStudents?.includes('1'))
-  );
+  const canAccessItem = (item: {
+    visibilityType: "ALL" | "SELECTIVE" | "BATCH";
+    batchId?: string;
+    selectedStudents?: string[];
+  }) => {
+    if (!user) return false;
+    if (item.visibilityType === "ALL") return true;
+    if (item.visibilityType === "BATCH") return !!user.batchId && item.batchId === user.batchId;
+    return (
+      item.selectedStudents?.includes(user.studentRecordId || "") ||
+      item.selectedStudents?.includes(user.id) ||
+      false
+    );
+  };
 
-  const availableVideos = videos.filter(video => 
-    video.visibilityType === 'ALL' || 
-    (video.visibilityType === 'SELECTIVE' && video.selectedStudents?.includes('1'))
-  );
+  const availableContent = content.filter((item) => canAccessItem(item));
+  const availableVideos = videos.filter((video) => canAccessItem(video));
 
-  const recentContent = availableContent.slice(0, 3);
-  const recentVideos = availableVideos.slice(0, 2);
+  const recentContent = [...availableContent]
+    .sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime())
+    .slice(0, 3);
+  const recentVideos = [...availableVideos]
+    .sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime())
+    .slice(0, 2);
+
+  const recentAnnouncements = useMemo(() => {
+    const items = [
+      ...recentContent.map((item) => ({
+        id: `content-${item.id}`,
+        title: "New course material shared",
+        description: `${item.title} is now available in your library.`,
+        time: item.uploadDate,
+      })),
+      ...recentVideos.map((video) => ({
+        id: `video-${video.id}`,
+        title: "New video lesson added",
+        description: `${video.title} is now available to watch.`,
+        time: video.uploadDate,
+      })),
+      ...tests
+        .filter((t) => user?.batchId && t.batchId === user.batchId)
+        .map((test) => ({
+          id: `test-${test.id}`,
+          title: `Test ${test.testNo} scheduled`,
+          description: `${test.portion} on ${test.testDate} (${test.startTime} - ${test.endTime})`,
+          time: test.createdDate || test.testDate,
+        })),
+    ];
+
+    return items
+      .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+      .slice(0, 4);
+  }, [recentContent, recentVideos, tests, user?.batchId]);
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-semibold text-slate-900">Welcome back, {user?.name}!</h1>
-        <p className="text-slate-600 mt-1">Here's what's new in your courses</p>
+        <h1 className="text-3xl font-semibold text-slate-900">
+          Welcome back, {user?.name}!
+        </h1>
+        <p className="text-slate-600 mt-1">Here&apos;s what&apos;s new in your courses</p>
       </div>
 
       {/* Quick Stats */}
@@ -81,7 +124,7 @@ export default function StudentDashboard() {
         <Card className="border-slate-200">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Recent Resources</CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/student/resources')}>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/student/media")}>
               View All <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </CardHeader>
@@ -90,6 +133,10 @@ export default function StudentDashboard() {
               <div
                 key={item.id}
                 className="flex items-start gap-4 p-3 border border-slate-200 rounded-lg hover:border-indigo-200 hover:bg-indigo-50/50 transition-all cursor-pointer"
+                onClick={() =>
+                  item.fileUrl &&
+                  window.open(item.fileUrl, "_blank", "noopener,noreferrer")
+                }
               >
                 <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   <FileText className="w-5 h-5 text-indigo-600" />
@@ -104,18 +151,18 @@ export default function StudentDashboard() {
                     <span className="text-xs text-slate-500">{item.uploadDate}</span>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" className="flex-shrink-0">
-                  <Download className="w-4 h-4" />
-                </Button>
               </div>
             ))}
+            {recentContent.length === 0 && (
+              <p className="text-sm text-slate-500">No recent resources available.</p>
+            )}
           </CardContent>
         </Card>
 
         <Card className="border-slate-200">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Recent Videos</CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/student/videos')}>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/student/media")}>
               View All <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </CardHeader>
@@ -148,6 +195,9 @@ export default function StudentDashboard() {
                 <p className="text-sm text-slate-600 line-clamp-2">{video.description}</p>
               </div>
             ))}
+            {recentVideos.length === 0 && (
+              <p className="text-sm text-slate-500">No recent videos available.</p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -158,30 +208,31 @@ export default function StudentDashboard() {
           <CardTitle>Announcements</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="p-4 bg-white rounded-lg border border-indigo-200">
-            <div className="flex items-start gap-3">
-              <div className="w-2 h-2 bg-indigo-600 rounded-full mt-2"></div>
-              <div>
-                <p className="font-medium text-slate-900">New Course Materials Available</p>
-                <p className="text-sm text-slate-600 mt-1">
-                  Check out the latest resources on Data Structures & Algorithms
-                </p>
-                <p className="text-xs text-slate-500 mt-2">2 days ago</p>
+          {recentAnnouncements.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No announcements yet. New uploads and tests will appear here.
+            </p>
+          ) : (
+            recentAnnouncements.map((announcement, index) => (
+              <div
+                key={announcement.id}
+                className="p-4 bg-white rounded-lg border border-slate-200"
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`w-2 h-2 rounded-full mt-2 ${index === 0 ? "bg-indigo-600" : "bg-slate-400"}`}
+                  ></div>
+                  <div>
+                    <p className="font-medium text-slate-900">{announcement.title}</p>
+                    <p className="text-sm text-slate-600 mt-1">
+                      {announcement.description}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-2">{announcement.time}</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-          <div className="p-4 bg-white rounded-lg border border-slate-200">
-            <div className="flex items-start gap-3">
-              <div className="w-2 h-2 bg-slate-400 rounded-full mt-2"></div>
-              <div>
-                <p className="font-medium text-slate-900">Upcoming Assessment</p>
-                <p className="text-sm text-slate-600 mt-1">
-                  Prepare for the mid-term assessment scheduled for next week
-                </p>
-                <p className="text-xs text-slate-500 mt-2">5 days ago</p>
-              </div>
-            </div>
-          </div>
+            ))
+          )}
         </CardContent>
       </Card>
     </div>

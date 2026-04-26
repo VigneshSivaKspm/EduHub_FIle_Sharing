@@ -29,8 +29,12 @@ export default function MediaLibrary() {
   }) => {
     if (!user) return false;
     if (item.visibilityType === "ALL") return true;
-    if (item.visibilityType === "BATCH") return item.batchId === user.batchId;
-    return item.selectedStudents?.includes(user.id) || false;
+    if (item.visibilityType === "BATCH") return !!user.batchId && item.batchId === user.batchId;
+    return (
+      item.selectedStudents?.includes(user.studentRecordId || "") ||
+      item.selectedStudents?.includes(user.id) ||
+      false
+    );
   };
 
   const batchContent = content.filter((c) => canAccessItem(c));
@@ -82,14 +86,14 @@ export default function MediaLibrary() {
     };
   }, []);
 
-  if (!user?.batchId) {
+  if (!user) {
     return (
       <div className="space-y-6">
         <h1 className="text-3xl font-semibold text-slate-900">Media Library</h1>
         <Alert>
-          <AlertTitle>Not Enrolled</AlertTitle>
+          <AlertTitle>Not Logged In</AlertTitle>
           <AlertDescription>
-            You are not enrolled in any batch. Please contact administrator.
+            Please sign in to view your learning materials.
           </AlertDescription>
         </Alert>
       </div>
