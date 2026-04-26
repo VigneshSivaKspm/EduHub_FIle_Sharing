@@ -1,4 +1,7 @@
+import React from "react";
 import { createBrowserRouter, Navigate } from "react-router";
+import type { ReactElement } from "react";
+import { useAuth } from "./context/AuthContext";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import Login from "./pages/Login";
 import AdminDashboard from "./pages/admin/Dashboard";
@@ -10,14 +13,38 @@ import StudentDashboard from "./pages/student/Dashboard";
 import MediaLibrary from "./pages/student/MediaLibrary";
 import TestSchedule from "./pages/student/TestSchedule";
 
+function StudentOnlyRoute({ children }: { children: ReactElement }) {
+  const { user, loading } = useAuth();
+
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== "student") return <Navigate to="/admin" replace />;
+
+  return children;
+}
+
+function AdminOnlyRoute({ children }: { children: ReactElement }) {
+  const { user, loading } = useAuth();
+
+  if (loading) return null;
+  if (!user) return <Login role="admin" />;
+  if (user.role !== "admin") return <Navigate to="/student" replace />;
+
+  return children;
+}
+
 export const router = createBrowserRouter([
   {
     path: "/login",
-    element: <Login />,
+    element: <Login role="student" />,
   },
   {
     path: "/admin",
-    element: <DashboardLayout />,
+    element: (
+      <AdminOnlyRoute>
+        <DashboardLayout />
+      </AdminOnlyRoute>
+    ),
     children: [
       { index: true, element: <AdminDashboard /> },
       { path: "batches", element: <BatchManagement /> },
@@ -28,7 +55,11 @@ export const router = createBrowserRouter([
   },
   {
     path: "/student",
-    element: <DashboardLayout />,
+    element: (
+      <StudentOnlyRoute>
+        <DashboardLayout />
+      </StudentOnlyRoute>
+    ),
     children: [
       { index: true, element: <StudentDashboard /> },
       { path: "media", element: <MediaLibrary /> },

@@ -92,10 +92,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Fetch user data to verify role
       const userData = await fetchUserData(result.user);
-      if (userData) {
+      if (userData && userData.role === role) {
         setUser(userData);
         return true;
       }
+
+      // Prevent cross-role logins (e.g. admin via student login).
+      await signOut(auth);
+      setUser(null);
       return false;
     } catch (error) {
       console.error("Login error:", error);

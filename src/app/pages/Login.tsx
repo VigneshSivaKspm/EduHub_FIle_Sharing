@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/button";
@@ -11,20 +11,16 @@ import {
   CardHeader,
   CardTitle,
 } from "../components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
 import { GraduationCap, AlertCircle } from "lucide-react";
 import type { UserRole } from "../context/AuthContext";
 
-export default function Login() {
+interface LoginProps {
+  role?: UserRole;
+}
+
+export default function Login({ role = "student" }: LoginProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<UserRole>("student");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -60,27 +56,13 @@ export default function Login() {
           </div>
           <CardTitle className="text-3xl">Karthikeyan Analysis</CardTitle>
           <CardDescription className="text-base">
-            Secure Student Portal & Content Management
+              {role === "admin"
+                ? "Secure Admin Portal Access"
+                : "Secure Student Portal Access"}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="role">Select Role</Label>
-              <Select
-                value={role}
-                onValueChange={(value) => setRole(value as UserRole)}
-              >
-                <SelectTrigger id="role" className="bg-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="student">Student</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
               <Input
