@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useData } from "../../context/DataContext";
+import { useNavigate } from "react-router";
 import {
   Card,
   CardContent,
@@ -9,25 +10,31 @@ import {
 } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import { FileText, Film, Lock, Eye, Download } from "lucide-react";
+import { FileText, Film, Lock, Eye } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 
 export default function MediaLibrary() {
   const { user } = useAuth();
   const { content, videos, batches } = useData();
+  const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Get current batch name
   const currentBatch = batches.find((b) => b.id === user?.batchId);
 
-  // Get media for current batch
-  const batchContent = user?.batchId
-    ? content.filter((c) => c.batchId === user.batchId)
-    : [];
+  const canAccessItem = (item: {
+    visibilityType: "ALL" | "SELECTIVE" | "BATCH";
+    batchId?: string;
+    selectedStudents?: string[];
+  }) => {
+    if (!user) return false;
+    if (item.visibilityType === "ALL") return true;
+    if (item.visibilityType === "BATCH") return item.batchId === user.batchId;
+    return item.selectedStudents?.includes(user.id) || false;
+  };
 
-  const batchVideos = user?.batchId
-    ? videos.filter((v) => v.batchId === user.batchId)
-    : [];
+  const batchContent = content.filter((c) => canAccessItem(c));
+  const batchVideos = videos.filter((v) => canAccessItem(v));
 
   const allMedia = [...batchContent, ...batchVideos].sort(
     (a, b) =>
@@ -163,10 +170,14 @@ export default function MediaLibrary() {
                   <div className="flex-shrink-0">
                     <Button
                       onClick={() => {
-                        // In a real app, this would open the media viewer
-                        alert(
-                          `Opening ${isVideo ? "Video" : "PDF"}: ${item.title}`,
-                        );
+                        if (isVideo) {
+                          navigate(`/student/video/${item.id}`);
+                          return;
+                        }
+
+                        if ("fileUrl" in item && item.fileUrl) {
+                          window.open(item.fileUrl, "_blank", "noopener,noreferrer");
+                        }
                       }}
                       className="bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap"
                     >

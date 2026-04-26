@@ -30,6 +30,11 @@ interface User {
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string, role: UserRole) => Promise<boolean>;
+  signupAdmin: (
+    name: string,
+    email: string,
+    password: string,
+  ) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
   loading: boolean;
@@ -107,6 +112,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const signupAdmin = async (
+    name: string,
+    email: string,
+    password: string,
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+
+      await updateProfile(result.user, { displayName: name });
+
+      await setDoc(doc(db, "users", result.user.uid), {
+        role: "admin",
+        name,
+        email,
+        createdAt: new Date().toISOString(),
+      });
+
+      const createdUser = await fetchUserData(result.user);
+      setUser(createdUser);
+
+      return { success: true };
+    } catch (error: any) {
+      console.error("Admin signup error:", error);
+      return {
+        success: false,
+        error:
+          error?.code === "auth/email-already-in-use"
+            ? "This email is already registered. Please use another email."
+            : error?.code === "auth/weak-password"
+              ? "Password should be at least 6 characters long."
+              : "Unable to create admin account. Please try again.",
+      };
+    }
+  };
+
   const logout = async () => {
     try {
       await signOut(auth);
@@ -121,6 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         login,
+        signupAdmin,
         logout,
         isAuthenticated: !!user,
         loading,

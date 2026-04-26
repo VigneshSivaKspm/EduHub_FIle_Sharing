@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { AlertCircle, GraduationCap } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -11,40 +12,35 @@ import {
   CardHeader,
   CardTitle,
 } from "../components/ui/card";
-import { GraduationCap, AlertCircle } from "lucide-react";
-import type { UserRole } from "../context/AuthContext";
 
-interface LoginProps {
-  role?: UserRole;
-}
-
-export default function Login({ role = "student" }: LoginProps) {
+export default function AdminSignup() {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { signupAdmin } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
 
-    try {
-      const success = await login(email, password, role);
-      if (success) {
-        navigate(role === "admin" ? "/admin" : "/student");
-      } else {
-        setError("Invalid email or password. Please check your credentials.");
-      }
-    } catch (err: any) {
-      const errorMessage =
-        err?.message || "An error occurred. Please try again.";
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
     }
+
+    setLoading(true);
+    const result = await signupAdmin(name, email, password);
+
+    if (result.success) {
+      navigate("/admin");
+    } else {
+      setError(result.error || "Could not create account.");
+    }
+    setLoading(false);
   };
 
   return (
@@ -54,21 +50,32 @@ export default function Login({ role = "student" }: LoginProps) {
           <div className="mx-auto w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
             <GraduationCap className="w-9 h-9 text-white" />
           </div>
-          <CardTitle className="text-3xl">Karthikeyan Analysis</CardTitle>
+          <CardTitle className="text-3xl">Create Admin Account</CardTitle>
           <CardDescription className="text-base">
-              {role === "admin"
-                ? "Secure Admin Portal Access"
-                : "Secure Student Portal Access"}
+            Register a new administrator profile for the portal.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
+              <Label htmlFor="name">Full Name</Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="Admin full name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="bg-white"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="your.email@edu.com"
+                placeholder="admin@edu.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -81,10 +88,25 @@ export default function Login({ role = "student" }: LoginProps) {
               <Input
                 id="password"
                 type="password"
-                placeholder="Enter your password"
+                placeholder="Create a secure password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                minLength={6}
+                className="bg-white"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="Re-enter password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                minLength={6}
                 className="bg-white"
               />
             </div>
@@ -101,25 +123,15 @@ export default function Login({ role = "student" }: LoginProps) {
               className="w-full bg-indigo-600 hover:bg-indigo-700"
               disabled={loading}
             >
-              {loading ? "Signing in..." : "Sign In"}
+              {loading ? "Creating account..." : "Create Admin Account"}
             </Button>
 
-            <div className="pt-4 border-t">
-              <p className="text-xs text-center text-slate-500">
-                Use your email and password registered in Firebase to sign in.
-              </p>
-              {role === "admin" && (
-                <p className="text-sm text-center text-slate-600 mt-2">
-                  Need an admin account?{" "}
-                  <Link
-                    to="/admin/signup"
-                    className="text-indigo-600 hover:underline"
-                  >
-                    Create one
-                  </Link>
-                </p>
-              )}
-            </div>
+            <p className="text-sm text-center text-slate-600">
+              Already have an admin account?{" "}
+              <Link to="/admin/login" className="text-indigo-600 hover:underline">
+                Sign in
+              </Link>
+            </p>
           </form>
         </CardContent>
       </Card>

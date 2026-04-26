@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router';
-import { useData } from '../../context/DataContext';
-import { useAuth } from '../../context/AuthContext';
-import { Button } from '../../components/ui/button';
-import { Card, CardContent } from '../../components/ui/card';
-import { Badge } from '../../components/ui/badge';
-import { ArrowLeft, Shield, Clock, CheckCircle } from 'lucide-react';
+import { useEffect, useRef, useState } from "react";
+import { useParams, useNavigate } from "react-router";
+import { useData } from "../../context/DataContext";
+import { useAuth } from "../../context/AuthContext";
+import { Button } from "../../components/ui/button";
+import { Card, CardContent } from "../../components/ui/card";
+import { Badge } from "../../components/ui/badge";
+import { ArrowLeft, Shield, Clock, CheckCircle } from "lucide-react";
 
 export default function VideoPlayer() {
   const { id } = useParams();
@@ -16,7 +16,7 @@ export default function VideoPlayer() {
   const watermarkRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const video = videos.find(v => v.id === id);
+  const video = videos.find((v) => v.id === id);
 
   useEffect(() => {
     // Animate watermark position
@@ -71,7 +71,7 @@ export default function VideoPlayer() {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <h2 className="text-2xl font-semibold text-slate-900 mb-2">Video not found</h2>
-          <Button onClick={() => navigate('/student/videos')}>
+          <Button onClick={() => navigate("/student/media")}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Library
           </Button>
@@ -83,7 +83,11 @@ export default function VideoPlayer() {
   return (
     <div className="space-y-6">
       <div>
-        <Button variant="ghost" onClick={() => navigate('/student/videos')} className="mb-4">
+        <Button
+          variant="ghost"
+          onClick={() => navigate("/student/media")}
+          className="mb-4"
+        >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Library
         </Button>
@@ -114,7 +118,7 @@ export default function VideoPlayer() {
                 onPause={() => setIsPlaying(false)}
                 poster={video.thumbnail}
               >
-                <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4" />
+                <source src={video.videoUrl} type="video/mp4" />
                 Your browser does not support the video tag.
               </video>
 
@@ -125,14 +129,14 @@ export default function VideoPlayer() {
                   className="fixed pointer-events-none z-50"
                   style={{
                     opacity: 0.7,
-                    fontSize: '14px',
+                    fontSize: "14px",
                     fontWeight: 600,
-                    color: 'white',
-                    textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-                    padding: '8px 12px',
-                    backgroundColor: 'rgba(0,0,0,0.4)',
-                    borderRadius: '6px',
-                    backdropFilter: 'blur(4px)',
+                    color: "white",
+                    textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
+                    padding: "8px 12px",
+                    backgroundColor: "rgba(0,0,0,0.4)",
+                    borderRadius: "6px",
+                    backdropFilter: "blur(4px)",
                   }}
                 >
                   <div>{user?.studentId}</div>

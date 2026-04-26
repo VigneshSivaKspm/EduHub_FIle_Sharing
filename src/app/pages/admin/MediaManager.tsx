@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useData } from "../../context/DataContext";
-import type { Batch } from "../../context/DataContext";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -29,6 +28,8 @@ import {
 import { Badge } from "../../components/ui/badge";
 import { Textarea } from "../../components/ui/textarea";
 import { Upload, Trash2, FileText, Film, Plus } from "lucide-react";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { storage } from "../../../config/firebase";
 
 export default function MediaManager() {
   const {
@@ -51,40 +52,70 @@ export default function MediaManager() {
     description: "",
     type: "pdf" as "pdf" | "doc",
   });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleUpload = (e: React.FormEvent) => {
+  const uploadFileToStorage = async (folder: "content" | "videos", file: File) => {
+    const safeName = file.name.replace(/\s+/g, "_");
+    const filePath = `${folder}/${Date.now()}-${safeName}`;
+    const fileRef = ref(storage, filePath);
+    await uploadBytes(fileRef, file);
+    return getDownloadURL(fileRef);
+  };
+
+  const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
 
     if (!selectedBatch) {
-      alert("Please select a batch");
+      setError("Please select a batch.");
       return;
     }
 
-    if (uploadType === "pdf") {
-      addContent({
-        title: formData.title,
-        description: formData.description,
-        type: formData.type,
-        visibilityType: "BATCH",
-        batchId: selectedBatch,
-        fileUrl: `content-${Date.now()}`,
-      });
-    } else {
-      addVideo({
-        title: formData.title,
-        description: formData.description,
-        duration: "45:30",
-        thumbnail:
-          "https://via.placeholder.com/320x180?text=" +
-          encodeURIComponent(formData.title),
-        visibilityType: "BATCH",
-        batchId: selectedBatch,
-        videoUrl: `video-${Date.now()}`,
-      });
+    if (!selectedFile) {
+      setError(
+        uploadType === "pdf"
+          ? "Please select a PDF file."
+          : "Please select a video file.",
+      );
+      return;
     }
 
-    setFormData({ title: "", description: "", type: "pdf" });
-    setIsUploadDialogOpen(false);
+    try {
+      setIsUploading(true);
+      if (uploadType === "pdf") {
+        const fileUrl = await uploadFileToStorage("content", selectedFile);
+        const type = selectedFile.name.toLowerCase().endsWith(".pdf") ? "pdf" : "doc";
+        await addContent({
+          title: formData.title,
+          description: formData.description,
+          type,
+          visibilityType: "BATCH",
+          batchId: selectedBatch,
+          fileUrl,
+        });
+      } else {
+        const videoUrl = await uploadFileToStorage("videos", selectedFile);
+        await addVideo({
+          title: formData.title,
+          description: formData.description,
+          duration: "00:00",
+          thumbnail: `https://placehold.co/640x360/0f172a/ffffff?text=${encodeURIComponent(formData.title || "Video")}`,
+          visibilityType: "BATCH",
+          batchId: selectedBatch,
+          videoUrl,
+        });
+      }
+
+      setFormData({ title: "", description: "", type: "pdf" });
+      setSelectedFile(null);
+      setIsUploadDialogOpen(false);
+    } catch (uploadError: any) {
+      setError(uploadError?.message || "Upload failed. Please try again.");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const batchContent = selectedBatch
@@ -127,6 +158,11 @@ export default function MediaManager() {
             </DialogHeader>
             <form onSubmit={handleUpload}>
               <div className="space-y-4 py-4">
+                {error && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                    {error}
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="batch">Select Batch</Label>
                   <Select
@@ -207,8 +243,16 @@ export default function MediaManager() {
                       type="file"
                       className="hidden"
                       accept={uploadType === "pdf" ? ".pdf" : "video/*"}
+                      onChange={(e) =>
+                        setSelectedFile(e.target.files?.[0] || null)
+                      }
                     />
                   </label>
+                  {selectedFile && (
+                    <p className="text-xs text-slate-500">
+                      Selected: {selectedFile.name}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -216,15 +260,21 @@ export default function MediaManager() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsUploadDialogOpen(false)}
+                  onClick={() => {
+                    setIsUploadDialogOpen(false);
+                    setSelectedFile(null);
+                    setError("");
+                  }}
+                  disabled={isUploading}
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   className="bg-indigo-600 hover:bg-indigo-700"
+                  disabled={isUploading}
                 >
-                  Upload Media
+                  {isUploading ? "Uploading..." : "Upload Media"}
                 </Button>
               </DialogFooter>
             </form>
@@ -329,6 +379,26 @@ export default function MediaManager() {
                     <Trash2 className="w-4 h-4 mr-2" />
                     Delete
                   </Button>
+                  {"fileUrl" in item && item.fileUrl && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full mt-2"
+                      onClick={() => window.open(item.fileUrl, "_blank")}
+                    >
+                      Open File
+                    </Button>
+                  )}
+                  {"videoUrl" in item && item.videoUrl && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full mt-2"
+                      onClick={() => window.open(item.videoUrl, "_blank")}
+                    >
+                      Play Video
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             );

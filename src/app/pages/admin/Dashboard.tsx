@@ -1,55 +1,114 @@
-import { useData } from '../../context/DataContext';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Users, FileText, Video, TrendingUp } from 'lucide-react';
+import { Link } from "react-router";
+import { useMemo } from "react";
+import { useData } from "../../context/DataContext";
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import { Button } from "../../components/ui/button";
+import { Users, FileText, Video, TrendingUp } from "lucide-react";
 
 export default function AdminDashboard() {
-  const { students, content, videos } = useData();
+  const { students, content, videos, tests, loading } = useData();
 
-  const activeStudents = students.filter(s => s.status === 'active').length;
+  const activeStudents = students.filter((s) => s.status === "active").length;
+  const inactiveStudents = students.length - activeStudents;
+  const activeStudentPercent =
+    students.length > 0 ? Math.round((activeStudents / students.length) * 100) : 0;
 
   const stats = [
     {
-      title: 'Total Students',
+      title: "Total Students",
       value: students.length,
       icon: Users,
-      color: 'bg-blue-500',
-      trend: '+12%',
+      color: "bg-blue-500",
+      detail: `${inactiveStudents} inactive`,
     },
     {
-      title: 'Active Students',
+      title: "Active Students",
       value: activeStudents,
       icon: TrendingUp,
-      color: 'bg-green-500',
-      trend: '+5%',
+      color: "bg-green-500",
+      detail: `${activeStudentPercent}% of all students`,
     },
     {
-      title: 'Content Items',
+      title: "Content Items",
       value: content.length,
       icon: FileText,
-      color: 'bg-indigo-500',
-      trend: '+8%',
+      color: "bg-indigo-500",
+      detail: "PDFs, docs, and notes",
     },
     {
-      title: 'Video Courses',
+      title: "Video Courses",
       value: videos.length,
       icon: Video,
-      color: 'bg-purple-500',
-      trend: '+3%',
+      color: "bg-purple-500",
+      detail: `${tests.length} total tests scheduled`,
     },
   ];
 
-  const recentActivity = [
-    { action: 'New student enrolled', student: 'Sarah Williams', time: '2 hours ago' },
-    { action: 'Content uploaded', student: 'Admin', time: '5 hours ago' },
-    { action: 'Video published', student: 'Admin', time: '1 day ago' },
-    { action: 'Student profile updated', student: 'John Doe', time: '2 days ago' },
-  ];
+  const parseDate = (dateValue?: string) => {
+    if (!dateValue) return 0;
+    const parsed = new Date(dateValue).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+
+  const getRelativeTime = (dateValue?: string) => {
+    if (!dateValue) return "date unavailable";
+    const parsedTime = parseDate(dateValue);
+    if (!parsedTime) return "date unavailable";
+
+    const seconds = Math.floor((Date.now() - parsedTime) / 1000);
+    if (seconds < 60) return "just now";
+
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+
+    const days = Math.floor(hours / 24);
+    return `${days} day${days === 1 ? "" : "s"} ago`;
+  };
+
+  const recentActivity = useMemo(() => {
+    const studentActivity = students.map((student) => ({
+      action: "Student enrolled",
+      actor: student.name || student.email || "Unknown student",
+      date: student.enrolledDate,
+      timestamp: parseDate(student.enrolledDate),
+    }));
+
+    const contentActivity = content.map((item) => ({
+      action: "Content uploaded",
+      actor: item.title || "Untitled content",
+      date: item.uploadDate,
+      timestamp: parseDate(item.uploadDate),
+    }));
+
+    const videoActivity = videos.map((video) => ({
+      action: "Video uploaded",
+      actor: video.title || "Untitled video",
+      date: video.uploadDate,
+      timestamp: parseDate(video.uploadDate),
+    }));
+
+    const testActivity = tests.map((test) => ({
+      action: "Test created",
+      actor: `Test ${test.testNo}`,
+      date: test.createdDate,
+      timestamp: parseDate(test.createdDate),
+    }));
+
+    return [...studentActivity, ...contentActivity, ...videoActivity, ...testActivity]
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, 8);
+  }, [students, content, videos, tests]);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-semibold text-slate-900">Dashboard Overview</h1>
-        <p className="text-slate-600 mt-1">Monitor your portal's key metrics and activities</p>
+        <p className="text-slate-600 mt-1">
+          Monitor your portal&apos;s live metrics and recent updates
+        </p>
       </div>
 
       {/* Stats Grid */}
@@ -66,7 +125,7 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-slate-900">{stat.value}</div>
-              <p className="text-xs text-green-600 mt-1">{stat.trend} from last month</p>
+              <p className="text-xs text-slate-500 mt-1">{stat.detail}</p>
             </CardContent>
           </Card>
         ))}
@@ -79,18 +138,31 @@ export default function AdminDashboard() {
             <CardTitle>Recent Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {recentActivity.map((activity, index) => (
-                <div key={index} className="flex items-start gap-4 pb-4 border-b last:border-b-0 last:pb-0">
-                  <div className="w-2 h-2 bg-indigo-600 rounded-full mt-2"></div>
-                  <div className="flex-1">
-                    <p className="font-medium text-slate-900">{activity.action}</p>
-                    <p className="text-sm text-slate-600">{activity.student}</p>
-                    <p className="text-xs text-slate-400 mt-1">{activity.time}</p>
+            {loading ? (
+              <p className="text-sm text-slate-500">Loading activity...</p>
+            ) : recentActivity.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                No activity yet. Add students, content, videos, or tests to see updates.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {recentActivity.map((activity, index) => (
+                  <div
+                    key={`${activity.action}-${activity.actor}-${index}`}
+                    className="flex items-start gap-4 pb-4 border-b last:border-b-0 last:pb-0"
+                  >
+                    <div className="w-2 h-2 bg-indigo-600 rounded-full mt-2"></div>
+                    <div className="flex-1">
+                      <p className="font-medium text-slate-900">{activity.action}</p>
+                      <p className="text-sm text-slate-600">{activity.actor}</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {getRelativeTime(activity.date)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -100,41 +172,62 @@ export default function AdminDashboard() {
             <CardTitle>Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <button className="w-full p-4 text-left border border-slate-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 transition-all">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
-                  <Users className="w-5 h-5 text-white" />
+            <Link to="/admin/students" className="block">
+              <Button
+                variant="ghost"
+                className="w-full h-auto p-4 justify-start text-left border border-slate-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
+                    <Users className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">Manage Students</p>
+                    <p className="text-sm text-slate-600">
+                      Add and update student records
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-slate-900">Enroll New Student</p>
-                  <p className="text-sm text-slate-600">Add a new student to the portal</p>
+              </Button>
+            </Link>
+
+            <Link to="/admin/media" className="block">
+              <Button
+                variant="ghost"
+                className="w-full h-auto p-4 justify-start text-left border border-slate-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">Manage Content</p>
+                    <p className="text-sm text-slate-600">
+                      Upload and organize learning materials
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </button>
-            
-            <button className="w-full p-4 text-left border border-slate-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 transition-all">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-white" />
+              </Button>
+            </Link>
+
+            <Link to="/admin/tests" className="block">
+              <Button
+                variant="ghost"
+                className="w-full h-auto p-4 justify-start text-left border border-slate-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-pink-600 rounded-lg flex items-center justify-center">
+                    <Video className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">Manage Tests</p>
+                    <p className="text-sm text-slate-600">
+                      Schedule and maintain batch tests
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-slate-900">Upload Content</p>
-                  <p className="text-sm text-slate-600">Share notes and files with students</p>
-                </div>
-              </div>
-            </button>
-            
-            <button className="w-full p-4 text-left border border-slate-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 transition-all">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-pink-600 rounded-lg flex items-center justify-center">
-                  <Video className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <p className="font-medium text-slate-900">Upload Video Course</p>
-                  <p className="text-sm text-slate-600">Add secure video content</p>
-                </div>
-              </div>
-            </button>
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       </div>

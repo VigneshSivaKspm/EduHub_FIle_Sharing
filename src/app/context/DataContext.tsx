@@ -17,7 +17,8 @@ import {
   Timestamp,
   writeBatch,
 } from "firebase/firestore";
-import { db } from "../../config/firebase";
+import { deleteObject, ref as storageRef } from "firebase/storage";
+import { db, storage } from "../../config/firebase";
 
 export interface Batch {
   id: string;
@@ -369,6 +370,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const deleteContent = async (id: string) => {
     try {
+      const existingItem = content.find((c) => c.id === id);
+      if (existingItem?.fileUrl) {
+        try {
+          await deleteObject(storageRef(storage, existingItem.fileUrl));
+        } catch (storageError) {
+          console.warn("Could not delete content file from storage:", storageError);
+        }
+      }
+
       await deleteDoc(doc(db, "content", id));
       setContent(content.filter((c) => c.id !== id));
     } catch (error) {
@@ -402,6 +412,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const deleteVideo = async (id: string) => {
     try {
+      const existingVideo = videos.find((v) => v.id === id);
+      if (existingVideo?.videoUrl) {
+        try {
+          await deleteObject(storageRef(storage, existingVideo.videoUrl));
+        } catch (storageError) {
+          console.warn("Could not delete video from storage:", storageError);
+        }
+      }
+
       await deleteDoc(doc(db, "videos", id));
       setVideos(videos.filter((v) => v.id !== id));
     } catch (error) {

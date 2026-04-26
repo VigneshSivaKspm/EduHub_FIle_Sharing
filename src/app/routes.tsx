@@ -4,6 +4,7 @@ import type { ReactElement } from "react";
 import { useAuth } from "./context/AuthContext";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import Login from "./pages/Login";
+import AdminSignup from "./pages/AdminSignup";
 import AdminDashboard from "./pages/admin/Dashboard";
 import BatchManagement from "./pages/admin/BatchManagement";
 import StudentManagement from "./pages/admin/StudentManagement";
@@ -12,6 +13,7 @@ import TestManagement from "./pages/admin/TestManagement";
 import StudentDashboard from "./pages/student/Dashboard";
 import MediaLibrary from "./pages/student/MediaLibrary";
 import TestSchedule from "./pages/student/TestSchedule";
+import VideoPlayer from "./pages/student/VideoPlayer";
 
 function StudentOnlyRoute({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -27,7 +29,7 @@ function AdminOnlyRoute({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
 
   if (loading) return null;
-  if (!user) return <Login role="admin" />;
+  if (!user) return <Navigate to="/admin/login" replace />;
   if (user.role !== "admin") return <Navigate to="/student" replace />;
 
   return children;
@@ -37,6 +39,14 @@ export const router = createBrowserRouter([
   {
     path: "/login",
     element: <Login role="student" />,
+  },
+  {
+    path: "/admin/login",
+    element: <Login role="admin" />,
+  },
+  {
+    path: "/admin/signup",
+    element: <AdminSignup />,
   },
   {
     path: "/admin",
@@ -63,6 +73,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <StudentDashboard /> },
       { path: "media", element: <MediaLibrary /> },
+      { path: "video/:id", element: <VideoPlayer /> },
       { path: "tests", element: <TestSchedule /> },
     ],
   },
