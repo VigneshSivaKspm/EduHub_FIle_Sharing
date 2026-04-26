@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useData } from "../../context/DataContext";
 import { useAuth } from "../../context/AuthContext";
@@ -13,47 +13,17 @@ export default function PdfViewer() {
   const { content } = useData();
   const { user } = useAuth();
   const containerRef = useRef<HTMLDivElement>(null);
-  const [viewerUrl, setViewerUrl] = useState<string>("");
-  const [viewerError, setViewerError] = useState("");
+  const frameRef = useRef<number | null>(null);
+  const [watermarkPosition, setWatermarkPosition] = useState({ x: 24, y: 24 });
+  const [watermarkStamp, setWatermarkStamp] = useState(
+    new Date().toLocaleString(),
+  );
 
   const file = content.find((item) => item.id === id);
-
-  useEffect(() => {
-    if (!file?.fileUrl) return;
-
-    let objectUrl = "";
-
-    const loadPdf = async () => {
-      try {
-        setViewerError("");
-        const response = await fetch(file.fileUrl, { cache: "no-store" });
-        if (!response.ok) {
-          throw new Error("Could not load PDF content.");
-        }
-
-        const blob = await response.blob();
-        objectUrl = URL.createObjectURL(blob);
-        setViewerUrl(
-          `${objectUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`,
-        );
-      } catch (error) {
-        setViewerError(
-          "Protected preview could not be loaded in this browser. Try opening in Chrome or check browser security settings.",
-        );
-        setViewerUrl(
-          `${file.fileUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`,
-        );
-      }
-    };
-
-    loadPdf();
-
-    return () => {
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-  }, [file?.fileUrl]);
+  const userMark = useMemo(
+    () => user?.studentId || user?.email || "student",
+    [user?.studentId, user?.email],
+  );
 
   useEffect(() => {
     const container = containerRef.current;
@@ -88,6 +58,50 @@ export default function PdfViewer() {
     };
   }, []);
 
+  useEffect(() => {
+    const ticker = window.setInterval(() => {
+      setWatermarkStamp(new Date().toLocaleString());
+    }, 15000);
+
+    return () => window.clearInterval(ticker);
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    let x = 24;
+    let y = 24;
+    let vx = 0.6;
+    let vy = 0.5;
+    const pad = 16;
+    const watermarkWidth = 240;
+    const watermarkHeight = 56;
+
+    const animate = () => {
+      const bounds = container.getBoundingClientRect();
+      const maxX = Math.max(pad, bounds.width - watermarkWidth - pad);
+      const maxY = Math.max(pad, bounds.height - watermarkHeight - pad);
+
+      x += vx;
+      y += vy;
+
+      if (x <= pad || x >= maxX) vx = -vx;
+      if (y <= pad || y >= maxY) vy = -vy;
+
+      setWatermarkPosition({ x, y });
+      frameRef.current = requestAnimationFrame(animate);
+    };
+
+    frameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current);
+      }
+    };
+  }, []);
+
   if (!file || !file.fileUrl) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -103,6 +117,7 @@ export default function PdfViewer() {
       </div>
     );
   }
+  const protectedPdfUrl = `${file.fileUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`;
 
   return (
     <div ref={containerRef} className="space-y-4 select-none">
@@ -127,14 +142,39 @@ export default function PdfViewer() {
 
       <Card className="border-slate-200 overflow-hidden">
         <CardContent className="p-0 relative">
-          <iframe
-            title={file.title}
-            src={viewerUrl}
+          <object
+            data={protectedPdfUrl}
+            type="application/pdf"
             className="w-full h-[78vh] bg-slate-100"
-          />
-          <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
-            <div className="rounded-md bg-black/45 text-white text-xs px-3 py-1 backdrop-blur-sm">
-              {user?.studentId || user?.email} | Protected Document
+            aria-label={file.title}
+          >
+            <embed
+              src={protectedPdfUrl}
+              type="application/pdf"
+              className="w-full h-[78vh] bg-slate-100"
+            />
+            <div className="h-[78vh] flex items-center justify-center px-6 text-center">
+              <div>
+                <p className="text-sm font-medium text-slate-800">
+                  PDF preview is unavailable in this browser.
+                </p>
+                <p className="text-xs text-slate-600 mt-2">
+                  Try updating Edge/Chrome or disable strict PDF blocking
+                  policies in your browser settings.
+                </p>
+              </div>
+            </div>
+          </object>
+          <div
+            className="pointer-events-none absolute z-20 rounded-md bg-black/45 text-white text-xs px-3 py-2 backdrop-blur-sm border border-white/20"
+            style={{
+              left: `${watermarkPosition.x}px`,
+              top: `${watermarkPosition.y}px`,
+            }}
+          >
+            <div className="font-medium leading-tight">{userMark}</div>
+            <div className="text-[10px] opacity-90 leading-tight">
+              {watermarkStamp}
             </div>
           </div>
         </CardContent>
@@ -144,11 +184,6 @@ export default function PdfViewer() {
         Protected mode is enabled: direct download controls are disabled and
         activity is restricted inside the viewer.
       </div>
-      {viewerError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-          {viewerError}
-        </div>
-      )}
     </div>
   );
 }
